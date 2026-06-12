@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ChannelGrid from "@/components/ChannelGrid";
+import DisableInspect from "@/components/DisableInspect";
 import LiveVisitorBadge, { useLiveVisitors } from "@/components/LiveVisitorBadge";
 import VideoPlayer from "@/components/VideoPlayer";
 import type { Channel } from "@/lib/types";
@@ -95,7 +96,8 @@ export default function HomePage() {
   const filteredCount = useMemo(() => channels.length, [channels]);
 
   return (
-    <div className="min-h-screen bg-[#0b0f14] text-zinc-100">
+    <div className="min-h-screen bg-[#0b0f14] text-zinc-100 select-none">
+      <DisableInspect />
       <header
         ref={headerRef}
         className="sticky top-0 z-30 border-b border-white/10 bg-[#0b0f14]/95 backdrop-blur-md"
