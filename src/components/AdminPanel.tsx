@@ -167,7 +167,7 @@ export default function AdminPanel({ playlists, onUpdate }: AdminPanelProps) {
         <div className="flex flex-wrap gap-2">
           {(
             [
-              ["url", "Playlist URL"],
+              ["url", "M3U Link"],
               ["file", "Upload / Paste"],
               ["stream", "Single M3U8"],
               ["youtube", "YouTube"],
@@ -190,18 +190,18 @@ export default function AdminPanel({ playlists, onUpdate }: AdminPanelProps) {
 
         {sourceType === "url" ? (
           <div className="space-y-2">
-            <label className="mb-1 block text-sm text-zinc-400">Playlist URL</label>
+            <label className="mb-1 block text-sm text-zinc-400">M3U / playlist link</label>
             <input
               type="url"
               value={sourceUrl}
               onChange={(e) => setSourceUrl(e.target.value)}
-              placeholder="https://cdn-toffee-playlist.pages.dev/NS_player.m3u"
+              placeholder="https://example.com/playlist.m3u"
               className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-emerald-400"
               required
             />
             <p className="text-xs text-zinc-500">
-              M3U / M3U8 playlist links, Pastebin raw URLs, or JSON playlists (even if the
-              link ends in .m3u). Refreshes from this URL keep channels up to date.
+              Paste a direct link to an M3U file, Pastebin raw link, or any hosted playlist
+              URL. The app fetches channels from that link and can refresh them later.
             </p>
           </div>
         ) : sourceType === "youtube" ? (
