@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { isHlsUrl } from "@/lib/m3u-parser";
 import { rewriteM3U8Content } from "@/lib/proxy-utils";
+import { applyStreamProxyHeaders } from "@/lib/stream-headers";
 import {
   clearYoutubeStreamCache,
   extractYoutubeStreamUrl,
@@ -8,6 +9,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const videoId = request.nextUrl.searchParams.get("id");
@@ -40,14 +42,11 @@ export async function GET(request: NextRequest) {
       }
       const text = await manifestRes.text();
       const rewritten = rewriteM3U8Content(text, directUrl);
-      return new Response(rewritten, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/vnd.apple.mpegurl",
-          "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "no-store",
-        },
+      const manifestHeaders = new Headers({
+        "Content-Type": "application/vnd.apple.mpegurl",
       });
+      applyStreamProxyHeaders(manifestHeaders);
+      return new Response(rewritten, { status: 200, headers: manifestHeaders });
     }
 
     if (range) upstreamHeaders.Range = range;
@@ -69,8 +68,7 @@ export async function GET(request: NextRequest) {
     const contentType = upstream.headers.get("content-type");
     if (contentType) headers.set("Content-Type", contentType);
     headers.set("Accept-Ranges", "bytes");
-    headers.set("Access-Control-Allow-Origin", "*");
-    headers.set("Cache-Control", "no-store");
+    applyStreamProxyHeaders(headers);
 
     const contentLength = upstream.headers.get("content-length");
     const contentRange = upstream.headers.get("content-range");
