@@ -4,16 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ChannelGrid from "@/components/ChannelGrid";
 import LiveVisitorBadge, { useLiveVisitors } from "@/components/LiveVisitorBadge";
 import VideoPlayer from "@/components/VideoPlayer";
-import type { Channel } from "@/lib/types";
+import type { PublicChannel } from "@/lib/types";
 
 export default function HomePage() {
   const headerRef = useRef<HTMLElement>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const liveCount = useLiveVisitors();
 
-  const [channels, setChannels] = useState<Channel[]>([]);
+  const [channels, setChannels] = useState<PublicChannel[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
-  const [selected, setSelected] = useState<Channel | null>(null);
+  const [selected, setSelected] = useState<PublicChannel | null>(null);
   const [streamIndex, setStreamIndex] = useState(0);
   const [activeGroup, setActiveGroup] = useState<string>("All");
   const [loading, setLoading] = useState(true);
@@ -48,7 +48,7 @@ export default function HomePage() {
       setGroups(data.groups);
       setSelected((prev) => {
         if (!prev) return null;
-        const updated = data.channels.find((c: Channel) => c.id === prev.id);
+        const updated = data.channels.find((c: PublicChannel) => c.id === prev.id);
         if (!updated) return null;
         // Keep the same object reference when metadata unchanged so the player
         // does not tear down and restart the stream on background refresh.
@@ -56,7 +56,8 @@ export default function HomePage() {
           prev.name === updated.name &&
           prev.group === updated.group &&
           prev.logo === updated.logo &&
-          JSON.stringify(prev.streams) === JSON.stringify(updated.streams)
+          prev.streams.length === updated.streams.length &&
+          prev.streams.every((s, i) => s.type === updated.streams[i]?.type)
         ) {
           return prev;
         }
@@ -87,7 +88,7 @@ export default function HomePage() {
     };
   }, [loadChannels]);
 
-  const handleSelect = (channel: Channel) => {
+  const handleSelect = (channel: PublicChannel) => {
     setSelected(channel);
     setStreamIndex(0);
   };

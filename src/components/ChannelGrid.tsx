@@ -1,11 +1,11 @@
 "use client";
 
-import type { Channel } from "@/lib/types";
+import type { PublicChannel } from "@/lib/types";
 
 interface ChannelGridProps {
-  channels: Channel[];
+  channels: PublicChannel[];
   selectedId?: string;
-  onSelect: (channel: Channel) => void;
+  onSelect: (channel: PublicChannel) => void;
 }
 
 export default function ChannelGrid({
@@ -23,7 +23,7 @@ export default function ChannelGrid({
     );
   }
 
-  const grouped = channels.reduce<Record<string, Channel[]>>((acc, ch) => {
+  const grouped = channels.reduce<Record<string, PublicChannel[]>>((acc, ch) => {
     const key = ch.group || "Uncategorized";
     if (!acc[key]) acc[key] = [];
     acc[key].push(ch);

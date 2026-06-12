@@ -2,19 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { isHlsUrl } from "@/lib/m3u-parser";
 import {
   getPlayingLabel,
   levelsFromHls,
   type QualityOption,
 } from "@/lib/hls-quality";
-import { extractYoutubeVideoId, isYoutubeStream } from "@/lib/youtube";
+import { isYoutubeStream } from "@/lib/youtube";
 import QualitySelector from "@/components/QualitySelector";
 import YoutubePlayer from "@/components/YoutubePlayer";
-import type { Channel } from "@/lib/types";
+import type { PublicChannel } from "@/lib/types";
+
+interface PlaybackInfo {
+  type: "hls" | "youtube";
+  playbackUrl?: string;
+  youtubeId?: string;
+}
 
 interface VideoPlayerProps {
-  channel: Channel | null;
+  channel: PublicChannel | null;
   streamIndex?: number;
 }
 
@@ -31,14 +36,15 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [playback, setPlayback] = useState<PlaybackInfo | null>(null);
   const [qualityLevels, setQualityLevels] = useState<QualityOption[]>([]);
   const [manualLevel, setManualLevel] = useState(-1);
   const [currentLabel, setCurrentLabel] = useState("Auto");
 
   const stream = channel?.streams[streamIndex] ?? channel?.streams[0];
-  const streamUrl = stream?.url;
   const isYoutube = isYoutubeStream(stream);
-  const youtubeVideoId = isYoutube && streamUrl ? extractYoutubeVideoId(streamUrl) : null;
+  const playbackUrl = playback?.type === "hls" ? playback.playbackUrl : undefined;
+  const youtubeVideoId = playback?.type === "youtube" ? playback.youtubeId : null;
 
   const syncQualityLabel = useCallback((hls: Hls | null, video?: HTMLVideoElement) => {
     if (hls && hls.levels.length > 0) {
@@ -71,15 +77,55 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
     setManualLevel(-1);
     setQualityLevels([]);
     setCurrentLabel("Auto");
-  }, [channel?.id, streamIndex, streamUrl]);
+    setPlayback(null);
+  }, [channel?.id, streamIndex]);
+
+  useEffect(() => {
+    if (!channel) {
+      setPlayback(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    const params = new URLSearchParams({
+      channelId: channel.id,
+      streamIndex: String(streamIndex),
+    });
+
+    fetch(`/api/playback?${params}`, { cache: "no-store" })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Playback unavailable");
+        if (!cancelled) setPlayback(data as PlaybackInfo);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPlayback(null);
+          setError(err instanceof Error ? err.message : "Playback unavailable");
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [channel, streamIndex]);
 
   useEffect(() => {
     if (isYoutube) return;
 
     const video = videoRef.current;
-    if (!video || !channel || !streamUrl) {
-      setError(null);
-      setLoading(false);
+    if (!video || !channel || !playbackUrl) {
+      if (!playbackUrl && channel && !isYoutube && playback?.type === "hls") {
+        return;
+      }
+      if (!channel || isYoutube) {
+        setError(null);
+        setLoading(false);
+      }
       return;
     }
 
@@ -96,7 +142,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
     video.load();
 
     let hls: Hls | null = null;
-    const isHls = isHlsUrl(streamUrl);
+    const isHls = true;
 
     const onPause = () => {
       userPausedRef.current = true;
@@ -134,7 +180,6 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
     if (isHls && Hls.isSupported()) {
       hls = new Hls({
         enableWorker: true,
-        // IPTV feeds are usually standard HLS, not LL-HLS — small buffers cause stutter.
         lowLatencyMode: false,
         backBufferLength: 90,
         maxBufferLength: 60,
@@ -143,7 +188,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
       });
       hlsRef.current = hls;
 
-      hls.loadSource(streamUrl);
+      hls.loadSource(playbackUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -192,7 +237,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
         setError("Playback failed — stream may be offline or blocked");
       });
     } else if (isHls && video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = streamUrl;
+      video.src = playbackUrl;
       video.addEventListener(
         "loadedmetadata",
         () => {
@@ -226,7 +271,14 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
         hlsRef.current = null;
       }
     };
-  }, [channel?.id, streamIndex, streamUrl, syncQualityLabel, isYoutube]);
+  }, [channel?.id, streamIndex, playbackUrl, syncQualityLabel, isYoutube, playback?.type]);
+
+  useEffect(() => {
+    if (isYoutube && youtubeVideoId) {
+      setLoading(false);
+      setError(null);
+    }
+  }, [isYoutube, youtubeVideoId]);
 
   if (!channel) {
     return (
@@ -240,10 +292,19 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
   }
 
   if (isYoutube) {
+    if (!youtubeVideoId && !loading) {
+      return (
+        <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-white/10 bg-black/40">
+          <p className="text-sm text-red-400">
+            {error || "Invalid YouTube link for this channel"}
+          </p>
+        </div>
+      );
+    }
     if (!youtubeVideoId) {
       return (
         <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-white/10 bg-black/40">
-          <p className="text-sm text-red-400">Invalid YouTube link for this channel</p>
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
         </div>
       );
     }

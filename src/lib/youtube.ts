@@ -34,10 +34,11 @@ export function getYoutubeEmbedUrl(videoId: string, autoplay = true): string {
 }
 
 export function isYoutubeStream(stream?: {
-  url: string;
+  url?: string;
   type?: string;
 }): boolean {
   if (!stream) return false;
   if (stream.type === "youtube") return true;
+  if (!stream.url) return false;
   return isYoutubeUrl(stream.url);
 }

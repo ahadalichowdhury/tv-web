@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAdminAuthenticated } from "@/lib/auth";
+import { toPublicChannel } from "@/lib/channel-public";
 import { getChannel } from "@/lib/storage";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -9,5 +11,6 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   if (!channel) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json(channel);
+  const authed = await isAdminAuthenticated();
+  return NextResponse.json(authed ? channel : toPublicChannel(channel));
 }

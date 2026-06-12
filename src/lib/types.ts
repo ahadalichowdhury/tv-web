@@ -5,6 +5,15 @@ export interface StreamSource {
   referer?: string;
 }
 
+/** Stream metadata exposed to viewers — no raw URLs */
+export interface PublicStreamSource {
+  type?: "hls" | "youtube";
+}
+
+export interface PublicChannel extends Omit<Channel, "streams"> {
+  streams: PublicStreamSource[];
+}
+
 export interface Channel {
   id: string;
   playlistId: string;
