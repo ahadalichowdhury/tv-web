@@ -1,10 +1,10 @@
 import type { StreamSource } from "./types";
 
-// Many IPTV stream servers block browser or server-side fetch User-Agents and
-// redirect to unrelated pages (e.g. Telegram). Using a well-known media player
-// UA causes them to return the actual stream instead.
-const DEFAULT_MEDIA_UA =
-  "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36 NSPlayer/7.0";
+// Many IPTV stream servers block requests that look like browsers (Mozilla/Chrome/Safari)
+// and redirect to Telegram or other pages instead. Using a media-player UA
+// (Lavf = FFmpeg's libavformat) bypasses these checks and returns the actual stream.
+// This must NOT contain "Mozilla", "Chrome", "Safari" or similar browser strings.
+const DEFAULT_MEDIA_UA = "Lavf/60.3.100";
 
 export function buildUpstreamHeaders(
   stream: Pick<StreamSource, "userAgent" | "referer">,

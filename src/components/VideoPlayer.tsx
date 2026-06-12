@@ -175,6 +175,19 @@ function useHlsPlayback(
         }
         setLoading(false);
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          // Don't retry on 4xx/5xx — these are server-side blocks (wrong UA,
+          // expired token, IP restriction, web page instead of stream, etc.).
+          // Retrying endlessly would cause "spinner forever" with no feedback.
+          const response = data.networkDetails as Response | undefined;
+          const status = response?.status ?? 0;
+          if (status >= 400) {
+            setError(
+              status === 502
+                ? "Stream blocked or returned a web page — may be IP-restricted or expired"
+                : "Stream unavailable — server returned an error"
+            );
+            return;
+          }
           setError("Network error — retrying...");
           hls?.startLoad();
           return;

@@ -127,7 +127,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const contentType = upstream.headers.get("content-type");
+    const contentType = upstream.headers.get("content-type") ?? "";
+
+    // Some IPTV servers redirect to Telegram or other web pages when they
+    // detect a browser UA. Detect HTML responses early and return a clear 502
+    // so hls.js gets a fatal error instead of silently spinning forever.
+    if (contentType.startsWith("text/html")) {
+      return NextResponse.json(
+        { error: "Stream blocked — server returned a web page instead of a stream (may be IP-restricted, expired, or UA-blocked)" },
+        { status: 502 }
+      );
+    }
 
     if (rangeHeader && upstream.status === 206) {
       const responseHeaders = new Headers();
