@@ -8,14 +8,18 @@ import {
   levelsFromHls,
   type QualityOption,
 } from "@/lib/hls-quality";
+import type { StreamKind } from "@/lib/stream-detect";
+import { buildChannelStreamUrl } from "@/lib/stream-token";
 import { extractYoutubeVideoId, isYoutubeStream } from "@/lib/youtube";
 import QualitySelector from "@/components/QualitySelector";
 import YoutubePlayer from "@/components/YoutubePlayer";
+import type { NetworkStreamSession } from "@/components/NetworkStreamBox";
 import type { Channel } from "@/lib/types";
 
 interface VideoPlayerProps {
-  channel: Channel | null;
+  channel?: Channel | null;
   streamIndex?: number;
+  networkPlay?: NetworkStreamSession | null;
 }
 
 function stopPlayback(video: HTMLVideoElement, hls: Hls | null) {
@@ -23,7 +27,12 @@ function stopPlayback(video: HTMLVideoElement, hls: Hls | null) {
   if (hls) hls.stopLoad();
 }
 
-export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerProps) {
+function useHlsPlayback(
+  playUrl: string | undefined,
+  streamKind: StreamKind,
+  originalUrl: string | undefined,
+  enabled: boolean
+) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const userPausedRef = useRef(false);
@@ -34,11 +43,6 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
   const [qualityLevels, setQualityLevels] = useState<QualityOption[]>([]);
   const [manualLevel, setManualLevel] = useState(-1);
   const [currentLabel, setCurrentLabel] = useState("Auto");
-
-  const stream = channel?.streams[streamIndex] ?? channel?.streams[0];
-  const streamUrl = stream?.url;
-  const isYoutube = isYoutubeStream(stream);
-  const youtubeVideoId = isYoutube && streamUrl ? extractYoutubeVideoId(streamUrl) : null;
 
   const syncQualityLabel = useCallback((hls: Hls | null, video?: HTMLVideoElement) => {
     if (hls && hls.levels.length > 0) {
@@ -71,17 +75,17 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
     setManualLevel(-1);
     setQualityLevels([]);
     setCurrentLabel("Auto");
-  }, [channel?.id, streamIndex, streamUrl]);
+  }, [playUrl]);
 
   useEffect(() => {
-    if (isYoutube) return;
-
-    const video = videoRef.current;
-    if (!video || !channel || !streamUrl) {
+    if (!enabled || !playUrl) {
       setError(null);
       setLoading(false);
       return;
     }
+
+    const video = videoRef.current;
+    if (!video) return;
 
     setLoading(true);
     setError(null);
@@ -96,7 +100,10 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
     video.load();
 
     let hls: Hls | null = null;
-    const isHls = isHlsUrl(streamUrl);
+    const useHls =
+      streamKind === "hls" ||
+      isHlsUrl(originalUrl ?? "") ||
+      playUrl.startsWith("/api/stream");
 
     const onPause = () => {
       userPausedRef.current = true;
@@ -131,7 +138,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
       }
     };
 
-    if (isHls && Hls.isSupported()) {
+    if (useHls && Hls.isSupported()) {
       hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
@@ -142,7 +149,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
       });
       hlsRef.current = hls;
 
-      hls.loadSource(streamUrl);
+      hls.loadSource(playUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -156,42 +163,33 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
         tryAutoplay();
       });
 
-      hls.on(Hls.Events.LEVEL_SWITCHED, () => {
-        syncQualityLabel(hls, video);
-      });
-
+      hls.on(Hls.Events.LEVEL_SWITCHED, () => syncQualityLabel(hls, video));
       hls.on(Hls.Events.LEVELS_UPDATED, () => {
-        const levels = levelsFromHls(hls!.levels);
-        setQualityLevels(levels);
+        setQualityLevels(levelsFromHls(hls!.levels));
         syncQualityLabel(hls, video);
       });
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (!data.fatal) return;
-
         if (userPausedRef.current || video.paused) {
           setLoading(false);
           return;
         }
-
         setLoading(false);
-
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           setError("Network error — retrying...");
           hls?.startLoad();
           return;
         }
-
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           setError("Media error — recovering...");
           hls?.recoverMediaError();
           return;
         }
-
         setError("Playback failed — stream may be offline or blocked");
       });
-    } else if (isHls && video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = streamUrl;
+    } else if (useHls && video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = playUrl;
       video.addEventListener(
         "loadedmetadata",
         () => {
@@ -201,14 +199,23 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
         },
         { once: true }
       );
+      video.addEventListener("error", () => setError("Unable to play this stream"), {
+        once: true,
+      });
+    } else if (streamKind === "progressive" || !useHls) {
+      video.src = playUrl;
       video.addEventListener(
-        "error",
-        () => setError("Unable to play this stream"),
+        "loadedmetadata",
+        () => {
+          setLoading(false);
+          syncQualityLabel(null, video);
+          tryAutoplay();
+        },
         { once: true }
       );
-    } else if (!isHls) {
-      setLoading(false);
-      setError("This stream format is not supported in the browser. Try another source.");
+      video.addEventListener("error", () => setError("Unable to play this stream"), {
+        once: true,
+      });
     } else {
       setLoading(false);
       setError("HLS playback is not supported in this browser");
@@ -225,14 +232,53 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
         hlsRef.current = null;
       }
     };
-  }, [channel?.id, streamIndex, streamUrl, syncQualityLabel, isYoutube]);
+  }, [playUrl, streamKind, originalUrl, enabled, syncQualityLabel]);
 
-  if (!channel) {
+  return {
+    videoRef,
+    error,
+    loading,
+    qualityLevels,
+    manualLevel,
+    currentLabel,
+    handleQualityChange,
+  };
+}
+
+export default function VideoPlayer({
+  channel = null,
+  streamIndex = 0,
+  networkPlay = null,
+}: VideoPlayerProps) {
+  const stream = channel?.streams[streamIndex] ?? channel?.streams[0];
+  const streamUrl = stream?.url;
+  const isYoutube = !networkPlay && isYoutubeStream(stream);
+  const youtubeVideoId =
+    isYoutube && streamUrl ? extractYoutubeVideoId(streamUrl) : null;
+
+  const playUrl = networkPlay
+    ? networkPlay.playUrl
+    : channel
+      ? buildChannelStreamUrl(channel.id, streamIndex)
+      : undefined;
+
+  const streamKind: StreamKind = networkPlay?.kind ?? "hls";
+  const displayName = networkPlay?.title ?? channel?.name ?? "";
+  const displayGroup = networkPlay ? "Direct URL" : channel?.group ?? "";
+
+  const playback = useHlsPlayback(
+    playUrl,
+    streamKind,
+    streamUrl,
+    Boolean(playUrl) && !isYoutube
+  );
+
+  if (!channel && !networkPlay) {
     return (
       <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-white/10 bg-black/40">
         <div className="text-center text-zinc-400">
           <div className="mb-2 text-4xl">📺</div>
-          <p className="text-sm">Select a channel to start watching</p>
+          <p className="text-sm">Select a channel or open a network stream</p>
         </div>
       </div>
     );
@@ -249,11 +295,14 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
     return (
       <YoutubePlayer
         videoId={youtubeVideoId}
-        title={channel.name}
-        group={channel.group}
+        title={channel!.name}
+        group={channel!.group}
       />
     );
   }
+
+  const { videoRef, error, loading, qualityLevels, manualLevel, currentLabel, handleQualityChange } =
+    playback;
 
   return (
     <div className="space-y-2">
@@ -269,7 +318,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
             {loading ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
-                <p className="text-sm text-zinc-300">Loading {channel.name}...</p>
+                <p className="text-sm text-zinc-300">Loading {displayName}...</p>
               </div>
             ) : (
               <div>
@@ -280,8 +329,8 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
           </div>
         )}
         <div className="pointer-events-none absolute left-0 right-0 top-0 bg-gradient-to-b from-black/80 to-transparent p-4">
-          <h2 className="truncate text-lg font-semibold text-white">{channel.name}</h2>
-          <p className="truncate text-xs text-zinc-300">{channel.group}</p>
+          <h2 className="truncate text-lg font-semibold text-white">{displayName}</h2>
+          <p className="truncate text-xs text-zinc-300">{displayGroup}</p>
         </div>
       </div>
 

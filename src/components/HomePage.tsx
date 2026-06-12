@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ChannelGrid from "@/components/ChannelGrid";
 import DisableInspect from "@/components/DisableInspect";
 import LiveVisitorBadge, { useLiveVisitors } from "@/components/LiveVisitorBadge";
+import NetworkStreamBox, { type NetworkStreamSession } from "@/components/NetworkStreamBox";
 import VideoPlayer from "@/components/VideoPlayer";
 import type { Channel } from "@/lib/types";
 
@@ -15,6 +16,7 @@ export default function HomePage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
   const [selected, setSelected] = useState<Channel | null>(null);
+  const [networkPlay, setNetworkPlay] = useState<NetworkStreamSession | null>(null);
   const [streamIndex, setStreamIndex] = useState(0);
   const [activeGroup, setActiveGroup] = useState<string>("All");
   const [loading, setLoading] = useState(true);
@@ -89,6 +91,7 @@ export default function HomePage() {
   }, [loadChannels]);
 
   const handleSelect = (channel: Channel) => {
+    setNetworkPlay(null);
     setSelected(channel);
     setStreamIndex(0);
   };
@@ -155,8 +158,13 @@ export default function HomePage() {
           className="sticky z-20 order-1 -mx-4 border-b border-white/10 bg-[#0b0f14]/95 px-4 pb-3 backdrop-blur-md max-lg:top-[var(--header-h)] lg:top-28 lg:order-2 lg:mx-0 lg:self-start lg:border-0 lg:bg-transparent lg:px-0 lg:pb-0 lg:backdrop-blur-none"
           style={{ "--header-h": `${headerHeight}px` } as React.CSSProperties}
         >
-          <VideoPlayer channel={selected} streamIndex={streamIndex} />
-          {selected && selected.streams.length > 1 && (
+          <VideoPlayer
+            channel={networkPlay ? null : selected}
+            streamIndex={streamIndex}
+            networkPlay={networkPlay}
+          />
+          <NetworkStreamBox onPlay={setNetworkPlay} />
+          {selected && !networkPlay && selected.streams.length > 1 && (
             <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 lg:mt-4 lg:p-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
                 Stream Sources
