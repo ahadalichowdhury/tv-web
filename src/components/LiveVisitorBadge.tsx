@@ -6,11 +6,18 @@ const SESSION_KEY = "tv_visitor_session";
 const HEARTBEAT_MS = 20_000;
 const POLL_MS = 10_000;
 
+function createSessionId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 function getSessionId(): string {
   if (typeof window === "undefined") return "";
   let id = sessionStorage.getItem(SESSION_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = createSessionId();
     sessionStorage.setItem(SESSION_KEY, id);
   }
   return id;
