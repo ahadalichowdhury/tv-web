@@ -13,13 +13,11 @@ import { buildChannelStreamUrl } from "@/lib/stream-token";
 import { extractYoutubeVideoId, isYoutubeStream } from "@/lib/youtube";
 import QualitySelector from "@/components/QualitySelector";
 import YoutubePlayer from "@/components/YoutubePlayer";
-import type { NetworkStreamSession } from "@/components/NetworkStreamBox";
 import type { Channel } from "@/lib/types";
 
 interface VideoPlayerProps {
-  channel?: Channel | null;
+  channel: Channel | null;
   streamIndex?: number;
-  networkPlay?: NetworkStreamSession | null;
 }
 
 function stopPlayback(video: HTMLVideoElement, hls: Hls | null) {
@@ -245,26 +243,15 @@ function useHlsPlayback(
   };
 }
 
-export default function VideoPlayer({
-  channel = null,
-  streamIndex = 0,
-  networkPlay = null,
-}: VideoPlayerProps) {
+export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerProps) {
   const stream = channel?.streams[streamIndex] ?? channel?.streams[0];
   const streamUrl = stream?.url;
-  const isYoutube = !networkPlay && isYoutubeStream(stream);
+  const isYoutube = isYoutubeStream(stream);
   const youtubeVideoId =
     isYoutube && streamUrl ? extractYoutubeVideoId(streamUrl) : null;
 
-  const playUrl = networkPlay
-    ? networkPlay.playUrl
-    : channel
-      ? buildChannelStreamUrl(channel.id, streamIndex)
-      : undefined;
-
-  const streamKind: StreamKind = networkPlay?.kind ?? "hls";
-  const displayName = networkPlay?.title ?? channel?.name ?? "";
-  const displayGroup = networkPlay ? "Direct URL" : channel?.group ?? "";
+  const playUrl = channel ? buildChannelStreamUrl(channel.id, streamIndex) : undefined;
+  const streamKind: StreamKind = "hls";
 
   const playback = useHlsPlayback(
     playUrl,
@@ -273,12 +260,12 @@ export default function VideoPlayer({
     Boolean(playUrl) && !isYoutube
   );
 
-  if (!channel && !networkPlay) {
+  if (!channel) {
     return (
       <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-white/10 bg-black/40">
         <div className="text-center text-zinc-400">
           <div className="mb-2 text-4xl">📺</div>
-          <p className="text-sm">Select a channel or open a network stream</p>
+          <p className="text-sm">Select a channel to start watching</p>
         </div>
       </div>
     );
@@ -295,8 +282,8 @@ export default function VideoPlayer({
     return (
       <YoutubePlayer
         videoId={youtubeVideoId}
-        title={channel!.name}
-        group={channel!.group}
+        title={channel.name}
+        group={channel.group}
       />
     );
   }
@@ -318,7 +305,7 @@ export default function VideoPlayer({
             {loading ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
-                <p className="text-sm text-zinc-300">Loading {displayName}...</p>
+                <p className="text-sm text-zinc-300">Loading {channel.name}...</p>
               </div>
             ) : (
               <div>
@@ -329,8 +316,8 @@ export default function VideoPlayer({
           </div>
         )}
         <div className="pointer-events-none absolute left-0 right-0 top-0 bg-gradient-to-b from-black/80 to-transparent p-4">
-          <h2 className="truncate text-lg font-semibold text-white">{displayName}</h2>
-          <p className="truncate text-xs text-zinc-300">{displayGroup}</p>
+          <h2 className="truncate text-lg font-semibold text-white">{channel.name}</h2>
+          <p className="truncate text-xs text-zinc-300">{channel.group}</p>
         </div>
       </div>
 
