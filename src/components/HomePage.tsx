@@ -48,7 +48,19 @@ export default function HomePage() {
       setGroups(data.groups);
       setSelected((prev) => {
         if (!prev) return null;
-        return data.channels.find((c: Channel) => c.id === prev.id) ?? null;
+        const updated = data.channels.find((c: Channel) => c.id === prev.id);
+        if (!updated) return null;
+        // Keep the same object reference when metadata unchanged so the player
+        // does not tear down and restart the stream on background refresh.
+        if (
+          prev.name === updated.name &&
+          prev.group === updated.group &&
+          prev.logo === updated.logo &&
+          JSON.stringify(prev.streams) === JSON.stringify(updated.streams)
+        ) {
+          return prev;
+        }
+        return updated;
       });
     } finally {
       if (!silent) setLoading(false);

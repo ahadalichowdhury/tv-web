@@ -134,10 +134,12 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
     if (isHls && Hls.isSupported()) {
       hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 30,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
+        // IPTV feeds are usually standard HLS, not LL-HLS — small buffers cause stutter.
+        lowLatencyMode: false,
+        backBufferLength: 90,
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
+        capLevelToPlayerSize: true,
       });
       hlsRef.current = hls;
 
@@ -224,7 +226,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
         hlsRef.current = null;
       }
     };
-  }, [channel, streamIndex, streamUrl, syncQualityLabel, isYoutube]);
+  }, [channel?.id, streamIndex, streamUrl, syncQualityLabel, isYoutube]);
 
   if (!channel) {
     return (
