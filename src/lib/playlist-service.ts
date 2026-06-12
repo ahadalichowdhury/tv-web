@@ -1,4 +1,4 @@
-import { parseM3U } from "./m3u-parser";
+import { parsePlaylistContent } from "./playlist-content";
 import {
   extractYoutubeVideoId,
   getYoutubeThumbnail,
@@ -26,11 +26,7 @@ export async function fetchM3UFromUrl(url: string): Promise<string> {
 }
 
 export function parseM3UContent(content: string): ParsedChannel[] {
-  const channels = parseM3U(content);
-  if (channels.length === 0) {
-    throw new Error("No channels found in M3U content");
-  }
-  return channels;
+  return parsePlaylistContent(content);
 }
 
 export async function importPlaylistFromUrl(name: string, url: string) {

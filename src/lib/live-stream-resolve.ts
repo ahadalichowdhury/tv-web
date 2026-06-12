@@ -1,4 +1,4 @@
-import { parseM3U } from "./m3u-parser";
+import { parsePlaylistContent } from "./playlist-content";
 import { fetchM3UFromUrl } from "./playlist-service";
 import { getPlaylist } from "./storage";
 import type { Channel, StreamSource } from "./types";
@@ -16,7 +16,7 @@ async function fetchM3UCached(sourceUrl: string): Promise<string> {
   return content;
 }
 
-function findMatchingChannel(parsed: ReturnType<typeof parseM3U>, channel: Channel) {
+function findMatchingChannel(parsed: ReturnType<typeof parsePlaylistContent>, channel: Channel) {
   if (channel.tvgId) {
     const byTvg = parsed.find((c) => c.tvgId && c.tvgId === channel.tvgId);
     if (byTvg) return byTvg;
@@ -38,7 +38,7 @@ export async function resolveLiveStream(
 
   try {
     const content = await fetchM3UCached(playlist.sourceUrl);
-    const parsed = parseM3U(content);
+    const parsed = parsePlaylistContent(content);
     const match = findMatchingChannel(parsed, channel);
     if (!match?.streams.length) return null;
     return match.streams[streamIndex] ?? match.streams[0];

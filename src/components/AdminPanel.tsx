@@ -141,7 +141,9 @@ export default function AdminPanel({ playlists, onUpdate }: AdminPanelProps) {
     const reader = new FileReader();
     reader.onload = () => {
       setContent(String(reader.result || ""));
-      if (!name) setName(file.name.replace(/\.m3u8?$/i, ""));
+      if (!name) {
+        setName(file.name.replace(/\.(m3u8?|json)$/i, ""));
+      }
     };
     reader.readAsText(file);
   };
@@ -165,8 +167,8 @@ export default function AdminPanel({ playlists, onUpdate }: AdminPanelProps) {
         <div className="flex flex-wrap gap-2">
           {(
             [
-              ["url", "From URL"],
-              ["file", "Upload M3U"],
+              ["url", "Playlist URL"],
+              ["file", "Upload / Paste"],
               ["stream", "Single M3U8"],
               ["youtube", "YouTube"],
             ] as const
@@ -187,14 +189,20 @@ export default function AdminPanel({ playlists, onUpdate }: AdminPanelProps) {
         </div>
 
         {sourceType === "url" ? (
-          <div>
-            <label className="mb-1 block text-sm text-zinc-400">M3U URL</label>
+          <div className="space-y-2">
+            <label className="mb-1 block text-sm text-zinc-400">Playlist URL</label>
             <input
+              type="url"
               value={sourceUrl}
               onChange={(e) => setSourceUrl(e.target.value)}
-              placeholder="https://pastebin.com/raw/xxxxx"
+              placeholder="https://cdn-toffee-playlist.pages.dev/NS_player.m3u"
               className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-emerald-400"
+              required
             />
+            <p className="text-xs text-zinc-500">
+              M3U / M3U8 playlist links, Pastebin raw URLs, or JSON playlists (even if the
+              link ends in .m3u). Refreshes from this URL keep channels up to date.
+            </p>
           </div>
         ) : sourceType === "youtube" ? (
           <div className="space-y-3">
@@ -273,24 +281,32 @@ export default function AdminPanel({ playlists, onUpdate }: AdminPanelProps) {
         ) : (
           <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-sm text-zinc-400">Upload .m3u / .m3u8 file</label>
+              <label className="mb-1 block text-sm text-zinc-400">
+                Upload playlist file (.m3u, .m3u8, .json)
+              </label>
               <input
                 type="file"
-                accept=".m3u,.m3u8,text/plain"
+                accept=".m3u,.m3u8,.json,application/json,text/plain"
                 onChange={handleFileUpload}
                 className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-500 file:px-3 file:py-2 file:text-sm file:font-medium file:text-black"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm text-zinc-400">Or paste M3U content</label>
+              <label className="mb-1 block text-sm text-zinc-400">
+                Or paste M3U / JSON content
+              </label>
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 rows={8}
-                placeholder="#EXTM3U&#10;#EXTINF:-1,Channel Name&#10;https://..."
+                placeholder="#EXTM3U&#10;#EXTINF:-1,Channel Name&#10;https://...&#10;&#10;— or JSON —&#10;[{&quot;name&quot;:&quot;Channel&quot;,&quot;link&quot;:&quot;https://...m3u8&quot;,&quot;category_name&quot;:&quot;Sports&quot;}]"
                 className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-xs outline-none focus:border-emerald-400"
+                required={sourceType === "file"}
               />
             </div>
+            <p className="text-xs text-zinc-500">
+              Supports standard M3U (#EXTM3U) and JSON channel lists (name + link/url).
+            </p>
           </div>
         )}
 
