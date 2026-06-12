@@ -143,9 +143,15 @@ export async function GET(request: NextRequest) {
 
     const body = new Uint8Array(await upstream.arrayBuffer());
 
-    if (detectManifest(targetUrl, contentType, body)) {
+    // Use the final URL after redirects as the base for resolving relative
+    // segment paths — the upstream may redirect to a completely different CDN
+    // (e.g. bluesport.fun → pscp.tv) whose relative paths would be wrong if
+    // we resolved them against the original targetUrl.
+    const finalUrl = upstream.url || targetUrl;
+
+    if (detectManifest(finalUrl, contentType, body)) {
       const text = new TextDecoder().decode(body);
-      const rewritten = rewriteManifest(text, targetUrl, ctx);
+      const rewritten = rewriteManifest(text, finalUrl, ctx);
 
       return new NextResponse(rewritten, {
         headers: {
