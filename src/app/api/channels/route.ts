@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAdminAuthenticated } from "@/lib/auth";
-import { toPublicChannels } from "@/lib/channel-public";
 import { getChannels } from "@/lib/storage";
 
 export async function GET(request: NextRequest) {
@@ -24,11 +22,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const authed = await isAdminAuthenticated();
-  const visible = authed ? channels : toPublicChannels(channels);
-
   return NextResponse.json({
-    channels: visible,
+    channels,
     groups: allGroups,
     total: channels.length,
   });
