@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
       headers,
     });
   } catch (error) {
+    console.error("yt-stream extraction error:", error);
     const message = error instanceof Error ? error.message : "Stream extraction failed";
     return new Response(message, { status: 500 });
   }

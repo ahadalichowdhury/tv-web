@@ -17,11 +17,17 @@ function getCache(): Map<string, CacheEntry> {
 }
 
 function getYtDlpBinary(): string {
-  return process.env.YT_DLP_PATH || "yt-dlp";
+  return process.env.YT_DLP_PATH || "/usr/local/bin/yt-dlp";
 }
 
 function getFormatSelector(): string {
-  return process.env.YT_DLP_FORMAT || "best[ext=mp4]/best[height<=1080]/best";
+  return process.env.YT_DLP_FORMAT || "best";
+}
+
+function getJsRuntimesArgs(): string[] {
+  const runtime = process.env.YT_DLP_JS_RUNTIMES?.trim();
+  if (!runtime) return [];
+  return ["--js-runtimes", runtime];
 }
 
 export async function extractYoutubeStreamUrl(videoId: string): Promise<string> {
@@ -49,6 +55,7 @@ function runYtDlp(pageUrl: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const binary = getYtDlpBinary();
     const args = [
+      ...getJsRuntimesArgs(),
       "-g",
       "--no-playlist",
       "--no-warnings",
