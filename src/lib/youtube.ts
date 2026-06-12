@@ -23,10 +23,6 @@ export function getYoutubeThumbnail(videoId: string): string {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 }
 
-export function getYoutubeProxyStreamUrl(videoId: string): string {
-  return `/api/yt-stream?id=${encodeURIComponent(videoId)}`;
-}
-
 export function getYoutubeEmbedUrl(videoId: string, autoplay = true): string {
   const params = new URLSearchParams({
     rel: "0",

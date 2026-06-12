@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { buildProxyUrl } from "@/lib/proxy-utils";
 import { isHlsUrl } from "@/lib/m3u-parser";
 import {
   getPlayingLabel,
@@ -38,8 +37,6 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
 
   const stream = channel?.streams[streamIndex] ?? channel?.streams[0];
   const streamUrl = stream?.url;
-  const streamUa = stream?.userAgent;
-  const streamReferer = stream?.referer;
   const isYoutube = isYoutubeStream(stream);
   const youtubeVideoId = isYoutube && streamUrl ? extractYoutubeVideoId(streamUrl) : null;
 
@@ -88,8 +85,6 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
 
     setLoading(true);
     setError(null);
-
-    const proxyUrl = buildProxyUrl(streamUrl, streamUa, streamReferer);
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -146,7 +141,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
       });
       hlsRef.current = hls;
 
-      hls.loadSource(proxyUrl);
+      hls.loadSource(streamUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -195,7 +190,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
         setError("Playback failed — stream may be offline or blocked");
       });
     } else if (isHls && video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = proxyUrl;
+      video.src = streamUrl;
       video.addEventListener(
         "loadedmetadata",
         () => {
@@ -229,7 +224,7 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
         hlsRef.current = null;
       }
     };
-  }, [channel, streamIndex, streamUrl, streamUa, streamReferer, syncQualityLabel, isYoutube]);
+  }, [channel, streamIndex, streamUrl, syncQualityLabel, isYoutube]);
 
   if (!channel) {
     return (
