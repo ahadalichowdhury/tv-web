@@ -46,13 +46,6 @@ function toBase64(buf: ArrayBuffer | Uint8Array): string {
   return btoa(binary);
 }
 
-function fromBase64(str: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(str);
-  const bytes = new Uint8Array(binary.length) as Uint8Array<ArrayBuffer>;
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
 /** Encrypt any JSON-serialisable value. Returns `{ d, iv }` — both base64. */
 export async function encryptPayload(data: unknown): Promise<{ d: string; iv: string }> {
   const [key, encoded] = await Promise.all([
