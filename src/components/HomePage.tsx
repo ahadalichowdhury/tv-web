@@ -6,6 +6,7 @@ import DisableInspect from "@/components/DisableInspect";
 import LiveVisitorBadge, { useLiveVisitors } from "@/components/LiveVisitorBadge";
 import VideoPlayer from "@/components/VideoPlayer";
 import type { Channel } from "@/lib/types";
+import { decryptPayload } from "@/lib/api-crypto";
 
 export default function HomePage() {
   const headerRef = useRef<HTMLElement>(null);
@@ -44,7 +45,8 @@ export default function HomePage() {
       const params = new URLSearchParams();
       if (activeGroup !== "All") params.set("group", activeGroup);
       const res = await fetch(`/api/channels?${params}`, { cache: "no-store" });
-      const data = await res.json();
+      const encrypted = await res.json();
+      const data = await decryptPayload<{ channels: Channel[]; groups: string[]; total: number }>(encrypted);
       setChannels(data.channels);
       setGroups(data.groups);
       setSelected((prev) => {
