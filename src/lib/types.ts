@@ -1,8 +1,26 @@
 export interface StreamSource {
   url: string;
-  type?: "hls" | "youtube";
+  /** Detected or forced stream type */
+  type?: "hls" | "dash" | "youtube" | "progressive";
   userAgent?: string;
   referer?: string;
+  /** HTTP Origin header */
+  origin?: string;
+  /** HTTP Cookie header */
+  cookie?: string;
+  /** Any extra custom headers (key:value pairs) */
+  extraHeaders?: Record<string, string>;
+  /**
+   * ClearKey DRM — inline format: "keyId:key" (hex, colon-separated)
+   * or a JSON ClearKey object string.
+   */
+  clearKey?: string;
+  /** ClearKey license server URL (alternative to inline clearKey) */
+  clearKeyUrl?: string;
+  /** Widevine license server URL */
+  widevineUrl?: string;
+  /** PlayReady license server URL */
+  playreadyUrl?: string;
 }
 
 export interface Channel {

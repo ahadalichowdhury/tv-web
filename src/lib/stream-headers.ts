@@ -7,7 +7,7 @@ import type { StreamSource } from "./types";
 const DEFAULT_MEDIA_UA = "Lavf/60.3.100";
 
 export function buildUpstreamHeaders(
-  stream: Pick<StreamSource, "userAgent" | "referer">,
+  stream: Pick<StreamSource, "userAgent" | "referer" | "origin" | "cookie" | "extraHeaders">,
   extra?: { range?: string }
 ): Record<string, string> {
   const headers: Record<string, string> = {
@@ -15,13 +15,17 @@ export function buildUpstreamHeaders(
     "User-Agent": stream.userAgent || DEFAULT_MEDIA_UA,
   };
 
-  if (stream.referer) {
-    headers["Referer"] = stream.referer;
+  if (stream.referer) headers["Referer"] = stream.referer;
+  if (stream.origin) headers["Origin"] = stream.origin;
+  if (stream.cookie) headers["Cookie"] = stream.cookie;
+
+  if (stream.extraHeaders) {
+    for (const [k, v] of Object.entries(stream.extraHeaders)) {
+      headers[k] = v;
+    }
   }
 
-  if (extra?.range) {
-    headers["Range"] = extra.range;
-  }
+  if (extra?.range) headers["Range"] = extra.range;
 
   return headers;
 }

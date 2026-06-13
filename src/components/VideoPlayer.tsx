@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { isHlsUrl } from "@/lib/m3u-parser";
+import { isDashUrl, isHlsUrl } from "@/lib/m3u-parser";
 import {
   getPlayingLabel,
   levelsFromHls,
@@ -13,6 +13,7 @@ import { buildChannelStreamUrl } from "@/lib/stream-token";
 import { extractYoutubeVideoId, isYoutubeStream } from "@/lib/youtube";
 import QualitySelector from "@/components/QualitySelector";
 import YoutubePlayer from "@/components/YoutubePlayer";
+import DashPlayer from "@/components/DashPlayer";
 import type { Channel } from "@/lib/types";
 
 interface VideoPlayerProps {
@@ -263,14 +264,21 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
   const youtubeVideoId =
     isYoutube && streamUrl ? extractYoutubeVideoId(streamUrl) : null;
 
+  // Detect stream type: honour the parsed .type from the M3U, then fall back
+  // to URL-based detection. Pipe-format URLs (url|header=val) are handled by
+  // the parser, so streamUrl here is already the clean URL.
+  const cleanUrl = streamUrl?.split("|")[0] ?? "";
+  const isDash =
+    stream?.type === "dash" || (!stream?.type && isDashUrl(cleanUrl));
+
   const playUrl = channel ? buildChannelStreamUrl(channel.id, streamIndex) : undefined;
-  const streamKind: StreamKind = "hls";
+  const streamKind: StreamKind = isDash ? "dash" : "hls";
 
   const playback = useHlsPlayback(
     playUrl,
     streamKind,
-    streamUrl,
-    Boolean(playUrl) && !isYoutube
+    cleanUrl,
+    Boolean(playUrl) && !isYoutube && !isDash
   );
 
   if (!channel) {
@@ -299,6 +307,10 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
         group={channel.group}
       />
     );
+  }
+
+  if (isDash && channel) {
+    return <DashPlayer channel={channel} streamIndex={streamIndex} />;
   }
 
   const { videoRef, error, loading, qualityLevels, manualLevel, currentLabel, handleQualityChange } =

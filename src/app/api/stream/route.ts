@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { detectManifest, rewriteManifest } from "@/lib/stream-proxy";
+import { detectManifest, rewriteHlsManifest, rewriteDashManifest } from "@/lib/stream-proxy";
 import { buildUpstreamHeaders } from "@/lib/stream-headers";
 import { resolveLiveStream } from "@/lib/live-stream-resolve";
 import {
@@ -17,6 +17,8 @@ async function resolveStreamSource(
     url?: string;
     referer?: string;
     userAgent?: string;
+    origin?: string;
+    cookie?: string;
   }
 ): Promise<{ stream: StreamSource; targetUrl: string } | null> {
   if (channelId === DIRECT_STREAM_CHANNEL_ID) {
@@ -27,6 +29,8 @@ async function resolveStreamSource(
         url,
         referer: tokenPayload.referer,
         userAgent: tokenPayload.userAgent,
+        origin: tokenPayload.origin,
+        cookie: tokenPayload.cookie,
       },
       targetUrl: url,
     };
@@ -46,6 +50,9 @@ async function resolveStreamSource(
     url: tokenPayload?.url ?? base.url,
     referer: tokenPayload?.referer ?? base.referer,
     userAgent: tokenPayload?.userAgent ?? base.userAgent,
+    origin: tokenPayload?.origin ?? base.origin,
+    cookie: tokenPayload?.cookie ?? base.cookie,
+    extraHeaders: base.extraHeaders,
   };
   const targetUrl = tokenPayload?.url ?? base.url;
   return { stream, targetUrl };
@@ -54,13 +61,15 @@ async function resolveStreamSource(
 function proxyContext(
   channelId: string,
   streamIndex: number,
-  stream: Pick<StreamSource, "referer" | "userAgent">
+  stream: Pick<StreamSource, "referer" | "userAgent" | "origin" | "cookie">
 ): StreamProxyContext {
   return {
     channelId,
     streamIndex,
     referer: stream.referer,
     userAgent: stream.userAgent,
+    origin: stream.origin,
+    cookie: stream.cookie,
   };
 }
 
@@ -159,10 +168,21 @@ export async function GET(request: NextRequest) {
     // we resolved them against the original targetUrl.
     const finalUrl = upstream.url || targetUrl;
 
-    if (detectManifest(finalUrl, contentType, body)) {
+    const manifestType = detectManifest(finalUrl, contentType, body);
+    if (manifestType) {
       const text = new TextDecoder().decode(body);
-      const rewritten = rewriteManifest(text, finalUrl, ctx);
 
+      if (manifestType === "dash") {
+        const rewritten = rewriteDashManifest(text, finalUrl, ctx);
+        return new NextResponse(rewritten, {
+          headers: {
+            "Content-Type": "application/dash+xml",
+            "Cache-Control": "no-store, no-cache",
+          },
+        });
+      }
+
+      const rewritten = rewriteHlsManifest(text, finalUrl, ctx);
       return new NextResponse(rewritten, {
         headers: {
           "Content-Type": "application/vnd.apple.mpegurl",

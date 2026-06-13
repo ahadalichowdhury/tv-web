@@ -10,6 +10,8 @@ export interface StreamTokenPayload {
   url?: string;
   referer?: string;
   userAgent?: string;
+  origin?: string;
+  cookie?: string;
   exp: number;
 }
 
@@ -18,6 +20,8 @@ export interface StreamProxyContext {
   streamIndex: number;
   referer?: string;
   userAgent?: string;
+  origin?: string;
+  cookie?: string;
 }
 
 function getSecret(): string {
@@ -37,6 +41,8 @@ export function createStreamToken(
     url: payload.url,
     referer: payload.referer,
     userAgent: payload.userAgent,
+    origin: payload.origin,
+    cookie: payload.cookie,
     exp: payload.exp ?? Date.now() + TOKEN_TTL_MS,
   };
   const encoded = Buffer.from(JSON.stringify(full)).toString("base64url");
@@ -91,6 +97,8 @@ export function buildStreamProxyPath(ctx: StreamProxyContext, upstreamUrl?: stri
     url: upstreamUrl,
     referer: ctx.referer,
     userAgent: ctx.userAgent,
+    origin: ctx.origin,
+    cookie: ctx.cookie,
   });
   return `/api/stream?t=${token}`;
 }
