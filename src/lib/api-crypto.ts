@@ -11,12 +11,26 @@
 
 const KEY_ENV = process.env.NEXT_PUBLIC_CHANNELS_KEY ?? "";
 
+function fromBase64(str: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(str);
+  const buf = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 /** Import the base64-encoded 32-byte key as a CryptoKey. */
 async function importKey(): Promise<CryptoKey> {
   if (!KEY_ENV) {
     throw new Error("NEXT_PUBLIC_CHANNELS_KEY is not set");
   }
-  const raw = Uint8Array.from(atob(KEY_ENV), (c) => c.charCodeAt(0));
+  const raw = fromBase64(KEY_ENV.trim());
+  if (raw.length !== 32) {
+    throw new Error(
+      `NEXT_PUBLIC_CHANNELS_KEY must decode to exactly 32 bytes (got ${raw.length}). ` +
+        "Generate with: openssl rand -base64 32"
+    );
+  }
   return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, [
     "encrypt",
     "decrypt",
@@ -26,10 +40,6 @@ async function importKey(): Promise<CryptoKey> {
 function toBase64(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   return btoa(String.fromCharCode(...bytes));
-}
-
-function fromBase64(str: string): Uint8Array {
-  return Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
 }
 
 /** Encrypt any JSON-serialisable value. Returns `{ d, iv }` — both base64. */
