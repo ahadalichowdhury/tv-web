@@ -150,15 +150,21 @@ function useHlsPlayback(
       hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
-        backBufferLength: 90,
-        maxBufferLength: 60,
-        maxMaxBufferLength: 120,
+        backBufferLength: 30,
+        maxBufferLength: 20,
+        maxMaxBufferLength: 60,
         capLevelToPlayerSize: true,
+        // Live streams (8–10s segments): start after ~2 segments, not ~30s behind edge.
+        liveSyncDurationCount: 2,
+        liveMaxLatencyDurationCount: 5,
+        maxLiveSyncPlaybackRate: 1.5,
       });
       hlsRef.current = hls;
 
       hls.loadSource(activeUrl);
       hls.attachMedia(video);
+
+      let firstSegmentBuffered = false;
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         const levels = levelsFromHls(hls!.levels);
@@ -166,9 +172,14 @@ function useHlsPlayback(
         if (manualLevelRef.current >= 0 && manualLevelRef.current < levels.length) {
           hls!.currentLevel = manualLevelRef.current;
         }
-        setLoading(false);
         syncQualityLabel(hls, video);
         tryAutoplay();
+      });
+
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        if (firstSegmentBuffered) return;
+        firstSegmentBuffered = true;
+        setLoading(false);
       });
 
       hls.on(Hls.Events.LEVEL_SWITCHED, () => syncQualityLabel(hls, video));

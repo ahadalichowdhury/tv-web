@@ -106,6 +106,22 @@ export async function GET(request: NextRequest) {
       return new NextResponse(upstream.body, { status: 206, headers: responseHeaders });
     }
 
+    // Segment/key requests — pipe through without buffering multi-MB .ts files.
+    const isBinarySegment =
+      Boolean(segmentUrl) ||
+      contentType.startsWith("video/") ||
+      contentType.startsWith("audio/") ||
+      contentType.includes("octet-stream");
+    if (isBinarySegment && upstream.body) {
+      const responseHeaders = new Headers();
+      if (contentType) responseHeaders.set("Content-Type", contentType);
+      responseHeaders.set("Cache-Control", "no-store, no-cache");
+      responseHeaders.set("Accept-Ranges", "bytes");
+      const contentLength = upstream.headers.get("content-length");
+      if (contentLength) responseHeaders.set("Content-Length", contentLength);
+      return new NextResponse(upstream.body, { headers: responseHeaders });
+    }
+
     const body = new Uint8Array(await upstream.arrayBuffer());
     const finalUrl = upstream.url || targetUrl;
 
