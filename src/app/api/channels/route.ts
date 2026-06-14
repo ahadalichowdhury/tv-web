@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getChannels } from "@/lib/storage";
-import { encryptPayload } from "@/lib/api-crypto";
 
 export async function GET(request: NextRequest) {
   const playlistId = request.nextUrl.searchParams.get("playlistId") || undefined;
@@ -23,11 +22,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const encrypted = await encryptPayload({
+  return NextResponse.json({
     channels,
     groups: allGroups,
     total: channels.length,
   });
-
-  return NextResponse.json(encrypted);
 }

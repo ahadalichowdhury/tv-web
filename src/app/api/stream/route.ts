@@ -2,59 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { detectManifest, rewriteHlsManifest, rewriteDashManifest } from "@/lib/stream-proxy";
 import { buildUpstreamHeaders } from "@/lib/stream-headers";
 import { resolveLiveStream } from "@/lib/live-stream-resolve";
-import {
-  DIRECT_STREAM_CHANNEL_ID,
-  verifyStreamToken,
-  type StreamProxyContext,
-} from "@/lib/stream-token";
+import type { StreamProxyContext } from "@/lib/stream-token";
 import { getChannel } from "@/lib/storage";
 import type { StreamSource } from "@/lib/types";
 
 async function resolveStreamSource(
   channelId: string,
   streamIndex: number,
-  tokenPayload?: {
-    url?: string;
-    referer?: string;
-    userAgent?: string;
-    origin?: string;
-    cookie?: string;
-  }
+  segmentUrl?: string
 ): Promise<{ stream: StreamSource; targetUrl: string } | null> {
-  if (channelId === DIRECT_STREAM_CHANNEL_ID) {
-    const url = tokenPayload?.url;
-    if (!url) return null;
-    return {
-      stream: {
-        url,
-        referer: tokenPayload.referer,
-        userAgent: tokenPayload.userAgent,
-        origin: tokenPayload.origin,
-        cookie: tokenPayload.cookie,
-      },
-      targetUrl: url,
-    };
-  }
-
   const channel = await getChannel(channelId);
   if (!channel) return null;
 
   const stored = channel.streams[streamIndex] ?? channel.streams[0];
   if (!stored?.url) return null;
 
-  const isRootRequest = !tokenPayload?.url;
+  const isRootRequest = !segmentUrl;
   const live = isRootRequest ? await resolveLiveStream(channel, streamIndex) : null;
   const base = live ?? stored;
 
   const stream: StreamSource = {
-    url: tokenPayload?.url ?? base.url,
-    referer: tokenPayload?.referer ?? base.referer,
-    userAgent: tokenPayload?.userAgent ?? base.userAgent,
-    origin: tokenPayload?.origin ?? base.origin,
-    cookie: tokenPayload?.cookie ?? base.cookie,
+    url: segmentUrl ?? base.url,
+    referer: base.referer,
+    userAgent: base.userAgent,
+    origin: base.origin,
+    cookie: base.cookie,
     extraHeaders: base.extraHeaders,
   };
-  const targetUrl = tokenPayload?.url ?? base.url;
+  const targetUrl = segmentUrl ?? base.url;
   return { stream, targetUrl };
 }
 
@@ -76,51 +51,25 @@ function proxyContext(
 export async function GET(request: NextRequest) {
   const channelId = request.nextUrl.searchParams.get("channelId");
   const streamIndex = Number(request.nextUrl.searchParams.get("streamIndex") ?? "0");
-  const token = request.nextUrl.searchParams.get("t");
+  const segmentUrl = request.nextUrl.searchParams.get("url") ?? undefined;
   const rangeHeader = request.headers.get("range");
 
-  let resolvedChannelId: string;
-  let resolvedStreamIndex: number;
-  let tokenPayload: {
-    url?: string;
-    referer?: string;
-    userAgent?: string;
-  } | undefined;
-
-  if (token) {
-    const payload = verifyStreamToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: "Invalid or expired token" }, { status: 403 });
-    }
-    resolvedChannelId = payload.channelId;
-    resolvedStreamIndex = payload.streamIndex;
-    tokenPayload = {
-      url: payload.url,
-      referer: payload.referer,
-      userAgent: payload.userAgent,
-    };
-  } else if (channelId) {
-    if (!Number.isFinite(streamIndex) || streamIndex < 0) {
-      return NextResponse.json({ error: "Invalid streamIndex" }, { status: 400 });
-    }
-    resolvedChannelId = channelId;
-    resolvedStreamIndex = streamIndex;
-  } else {
-    return NextResponse.json({ error: "Missing channelId or token" }, { status: 400 });
+  if (!channelId) {
+    return NextResponse.json({ error: "Missing channelId" }, { status: 400 });
   }
 
-  const resolved = await resolveStreamSource(
-    resolvedChannelId,
-    resolvedStreamIndex,
-    tokenPayload
-  );
+  if (!Number.isFinite(streamIndex) || streamIndex < 0) {
+    return NextResponse.json({ error: "Invalid streamIndex" }, { status: 400 });
+  }
+
+  const resolved = await resolveStreamSource(channelId, streamIndex, segmentUrl);
 
   if (!resolved) {
     return NextResponse.json({ error: "Stream not found" }, { status: 404 });
   }
 
   const { stream, targetUrl } = resolved;
-  const ctx = proxyContext(resolvedChannelId, resolvedStreamIndex, stream);
+  const ctx = proxyContext(channelId, streamIndex, stream);
 
   try {
     const upstream = await fetch(targetUrl, {
@@ -138,9 +87,6 @@ export async function GET(request: NextRequest) {
 
     const contentType = upstream.headers.get("content-type") ?? "";
 
-    // Some IPTV servers redirect to Telegram or other web pages when they
-    // detect a browser UA. Detect HTML responses early and return a clear 502
-    // so hls.js gets a fatal error instead of silently spinning forever.
     if (contentType.startsWith("text/html")) {
       return NextResponse.json(
         { error: "Stream blocked — server returned a web page instead of a stream (may be IP-restricted, expired, or UA-blocked)" },
@@ -161,11 +107,6 @@ export async function GET(request: NextRequest) {
     }
 
     const body = new Uint8Array(await upstream.arrayBuffer());
-
-    // Use the final URL after redirects as the base for resolving relative
-    // segment paths — the upstream may redirect to a completely different CDN
-    // (e.g. bluesport.fun → pscp.tv) whose relative paths would be wrong if
-    // we resolved them against the original targetUrl.
     const finalUrl = upstream.url || targetUrl;
 
     const manifestType = detectManifest(finalUrl, contentType, body);

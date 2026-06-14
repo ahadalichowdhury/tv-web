@@ -28,7 +28,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   return NextResponse.json({ success: true });
 }
 
-export async function POST(request: NextRequest, context: RouteContext) {
+export async function POST(_request: NextRequest, context: RouteContext) {
   const authed = await isAdminAuthenticated();
   if (!authed) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

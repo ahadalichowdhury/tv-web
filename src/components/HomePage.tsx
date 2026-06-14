@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ChannelGrid from "@/components/ChannelGrid";
-import DisableInspect from "@/components/DisableInspect";
 import LiveVisitorBadge, { useLiveVisitors } from "@/components/LiveVisitorBadge";
 import VideoPlayer from "@/components/VideoPlayer";
 import type { Channel } from "@/lib/types";
-import { decryptPayload } from "@/lib/api-crypto";
 
 export default function HomePage() {
   const headerRef = useRef<HTMLElement>(null);
@@ -45,8 +43,11 @@ export default function HomePage() {
       const params = new URLSearchParams();
       if (activeGroup !== "All") params.set("group", activeGroup);
       const res = await fetch(`/api/channels?${params}`, { cache: "no-store" });
-      const encrypted = await res.json();
-      const data = await decryptPayload<{ channels: Channel[]; groups: string[]; total: number }>(encrypted);
+      const data = (await res.json()) as {
+        channels: Channel[];
+        groups: string[];
+        total: number;
+      };
       setChannels(data.channels);
       setGroups(data.groups);
       setSelected((prev) => {
@@ -99,7 +100,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#0b0f14] text-zinc-100 select-none">
-      <DisableInspect />
       <header
         ref={headerRef}
         className="sticky top-0 z-30 border-b border-white/10 bg-[#0b0f14]/95 backdrop-blur-md"
