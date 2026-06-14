@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Channel } from "@/lib/types";
-import { buildChannelStreamUrl } from "@/lib/stream-token";
+import { resolvePlaybackUrl } from "@/lib/stream-playback";
 
 interface DashPlayerProps {
   channel: Channel;
@@ -46,11 +46,18 @@ function buildClearKeyConfig(clearKey: string): object | null {
 export default function DashPlayer({ channel, streamIndex = 0 }: DashPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<ReturnType<typeof import("dashjs")["MediaPlayer"]> | null>(null);
+  const usedFallbackRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const proxyUrl = buildChannelStreamUrl(channel.id, streamIndex);
+  const { playUrl, proxyUrl } = resolvePlaybackUrl(channel, streamIndex);
+  const [activeUrl, setActiveUrl] = useState(playUrl);
   const stream = channel.streams[streamIndex] ?? channel.streams[0];
+
+  useEffect(() => {
+    usedFallbackRef.current = false;
+    setActiveUrl(playUrl);
+  }, [playUrl]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -126,7 +133,7 @@ export default function DashPlayer({ channel, streamIndex = 0 }: DashPlayerProps
         });
       }
 
-      player.initialize(videoRef.current!, proxyUrl, true);
+      player.initialize(videoRef.current!, activeUrl, true);
 
       player.on(dashjs.MediaPlayer.events.PLAYBACK_PLAYING, () => {
         if (!destroyed) setLoading(false);
@@ -151,6 +158,13 @@ export default function DashPlayer({ channel, streamIndex = 0 }: DashPlayerProps
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
         if (destroyed) return;
+
+        if (activeUrl !== proxyUrl && !usedFallbackRef.current) {
+          usedFallbackRef.current = true;
+          setActiveUrl(proxyUrl);
+          return;
+        }
+
         setLoading(false);
         const msg =
           (e?.error?.message as string | undefined) ??
@@ -177,7 +191,14 @@ export default function DashPlayer({ channel, streamIndex = 0 }: DashPlayerProps
       }
       playerRef.current = null;
     };
-  }, [proxyUrl, stream?.clearKey, stream?.clearKeyUrl, stream?.widevineUrl, stream?.playreadyUrl]);
+  }, [
+    activeUrl,
+    proxyUrl,
+    stream?.clearKey,
+    stream?.clearKeyUrl,
+    stream?.widevineUrl,
+    stream?.playreadyUrl,
+  ]);
 
   return (
     <div className="space-y-2">

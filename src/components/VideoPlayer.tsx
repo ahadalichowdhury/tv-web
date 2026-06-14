@@ -9,7 +9,7 @@ import {
   type QualityOption,
 } from "@/lib/hls-quality";
 import type { StreamKind } from "@/lib/stream-detect";
-import { buildChannelStreamUrl } from "@/lib/stream-token";
+import { resolvePlaybackUrl } from "@/lib/stream-playback";
 import { extractYoutubeVideoId, isYoutubeStream } from "@/lib/youtube";
 import QualitySelector from "@/components/QualitySelector";
 import YoutubePlayer from "@/components/YoutubePlayer";
@@ -28,10 +28,13 @@ function stopPlayback(video: HTMLVideoElement, hls: Hls | null) {
 
 function useHlsPlayback(
   playUrl: string | undefined,
+  proxyFallbackUrl: string | undefined,
   streamKind: StreamKind,
   originalUrl: string | undefined,
   enabled: boolean
 ) {
+  const [activeUrl, setActiveUrl] = useState(playUrl);
+  const usedFallbackRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const userPausedRef = useRef(false);
@@ -69,15 +72,20 @@ function useHlsPlayback(
   }, [syncQualityLabel]);
 
   useEffect(() => {
+    usedFallbackRef.current = false;
+    setActiveUrl(playUrl);
+  }, [playUrl]);
+
+  useEffect(() => {
     userPausedRef.current = false;
     manualLevelRef.current = -1;
     setManualLevel(-1);
     setQualityLevels([]);
     setCurrentLabel("Auto");
-  }, [playUrl]);
+  }, [activeUrl]);
 
   useEffect(() => {
-    if (!enabled || !playUrl) {
+    if (!enabled || !activeUrl) {
       setError(null);
       setLoading(false);
       return;
@@ -102,7 +110,8 @@ function useHlsPlayback(
     const useHls =
       streamKind === "hls" ||
       isHlsUrl(originalUrl ?? "") ||
-      playUrl.startsWith("/api/stream");
+      activeUrl.startsWith("/api/stream") ||
+      isHlsUrl(activeUrl);
 
     const onPause = () => {
       userPausedRef.current = true;
@@ -148,7 +157,7 @@ function useHlsPlayback(
       });
       hlsRef.current = hls;
 
-      hls.loadSource(playUrl);
+      hls.loadSource(activeUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -176,11 +185,20 @@ function useHlsPlayback(
         }
         setLoading(false);
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          // Don't retry on 4xx/5xx — these are server-side blocks (wrong UA,
-          // expired token, IP restriction, web page instead of stream, etc.).
-          // Retrying endlessly would cause "spinner forever" with no feedback.
           const response = data.networkDetails as Response | undefined;
           const status = response?.status ?? 0;
+
+          // Direct CDN failed (CORS, geo-block, etc.) — fall back to server proxy once.
+          if (
+            proxyFallbackUrl &&
+            activeUrl !== proxyFallbackUrl &&
+            !usedFallbackRef.current
+          ) {
+            usedFallbackRef.current = true;
+            setActiveUrl(proxyFallbackUrl);
+            return;
+          }
+
           if (status >= 400) {
             setError(
               status === 502
@@ -201,7 +219,7 @@ function useHlsPlayback(
         setError("Playback failed — stream may be offline or blocked");
       });
     } else if (useHls && video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = playUrl;
+      video.src = activeUrl;
       video.addEventListener(
         "loadedmetadata",
         () => {
@@ -215,7 +233,7 @@ function useHlsPlayback(
         once: true,
       });
     } else if (streamKind === "progressive" || !useHls) {
-      video.src = playUrl;
+      video.src = activeUrl;
       video.addEventListener(
         "loadedmetadata",
         () => {
@@ -244,7 +262,7 @@ function useHlsPlayback(
         hlsRef.current = null;
       }
     };
-  }, [playUrl, streamKind, originalUrl, enabled, syncQualityLabel]);
+  }, [activeUrl, proxyFallbackUrl, streamKind, originalUrl, enabled, syncQualityLabel]);
 
   return {
     videoRef,
@@ -271,14 +289,15 @@ export default function VideoPlayer({ channel, streamIndex = 0 }: VideoPlayerPro
   const isDash =
     stream?.type === "dash" || (!stream?.type && isDashUrl(cleanUrl));
 
-  const playUrl = channel ? buildChannelStreamUrl(channel.id, streamIndex) : undefined;
+  const playbackUrls = channel ? resolvePlaybackUrl(channel, streamIndex) : null;
   const streamKind: StreamKind = isDash ? "dash" : "hls";
 
   const playback = useHlsPlayback(
-    playUrl,
+    playbackUrls?.playUrl,
+    playbackUrls?.proxyUrl,
     streamKind,
     cleanUrl,
-    Boolean(playUrl) && !isYoutube && !isDash
+    Boolean(playbackUrls?.playUrl) && !isYoutube && !isDash
   );
 
   if (!channel) {
